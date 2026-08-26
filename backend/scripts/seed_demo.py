@@ -1,6 +1,6 @@
 """Seed demo patient and doctor accounts for local development."""
 
-from app.database import SessionLocal, Base, engine
+from app.database import SessionLocal, Base, engine, ensure_sqlite_columns
 from app.models import User
 from app.services.auth import register_user
 from app.models import UserRole
@@ -13,6 +13,7 @@ DEMO = [
 
 def main():
     Base.metadata.create_all(bind=engine)
+    ensure_sqlite_columns()
     db = SessionLocal()
     try:
         if db.query(User).count() > 0:

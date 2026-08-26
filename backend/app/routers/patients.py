@@ -25,6 +25,8 @@ def update_my_profile(
     db: Session = Depends(get_db),
     request_id: str = Depends(get_request_id),
 ):
+    if not user.patient:
+        raise HTTPException(status_code=403, detail={"code": "ACCESS_DENIED", "message": "Patients only"})
     patient = assert_patient_self(user, user.patient.id)
     if payload.name is not None:
         patient.name = payload.name

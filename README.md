@@ -47,10 +47,13 @@ Upload `samples/demo-lab-report.pdf` as the patient, then create a consent grant
 | FastAPI backend with JWT auth | ✅ |
 | Patient / doctor registration & login | ✅ |
 | Document upload + private local storage | ✅ |
-| OCR/extraction pipeline (local mock, swappable) | ✅ |
-| Medical timeline | ✅ |
-| Consent grants + revocation | ✅ |
-| Doctor portal (scoped access) | ✅ |
+| Duplicate-hash detection + extraction review | ✅ |
+| OCR/extraction pipeline (named labs, vitals, meds, allergies) | ✅ |
+| Health summary + abnormal-value flags | ✅ |
+| FHIR R4 collection bundle export | ✅ |
+| Medical timeline with search/filters | ✅ |
+| Scoped consent grants + revocation | ✅ |
+| Doctor portal (timeline, documents, summary) | ✅ |
 | Append-only audit logging | ✅ |
 | Next.js frontend | ✅ |
 

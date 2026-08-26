@@ -1,7 +1,5 @@
 import hashlib
-import re
 import secrets
-from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -61,76 +59,7 @@ def extract_text_from_document(content: bytes, mime_type: str) -> str:
     return content.decode("utf-8", errors="ignore")
 
 
-def mock_structured_extraction(text: str) -> dict:
-    """Extract explicitly pattern-matched facts only. No inference."""
-    result = {
-        "document_date": None,
-        "hospital": None,
-        "physician": None,
-        "diagnoses": [],
-        "medications": [],
-        "vitals": [],
-        "laboratory_results": [],
-        "procedures": [],
-        "allergies": [],
-        "source_text_references": [],
-    }
-
-    date_match = re.search(r"(?:Date|Dated)\s*[:\-]?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})", text, re.I)
-    if date_match:
-        result["document_date"] = date_match.group(1)
-        result["source_text_references"].append(date_match.group(0))
-
-    hospital_match = re.search(r"(?:Hospital|Clinic|Medical Center)\s*[:\-]?\s*([A-Za-z0-9 .,&-]{3,80})", text, re.I)
-    if hospital_match:
-        result["hospital"] = hospital_match.group(1).strip()
-        result["source_text_references"].append(hospital_match.group(0))
-
-    physician_match = re.search(r"(?:Dr\.|Doctor|Physician)\s*([A-Za-z .]{3,60})", text, re.I)
-    if physician_match:
-        result["physician"] = physician_match.group(1).strip()
-        result["source_text_references"].append(physician_match.group(0))
-
-    for diag in re.findall(r"(?:Diagnosis|Impression)\s*[:\-]?\s*([^\n\r]{3,120})", text, re.I):
-        result["diagnoses"].append({"display_name": diag.strip(), "source": diag.strip()})
-
-    for med in re.findall(r"(?:Rx|Prescription|Medication)\s*[:\-]?\s*([^\n\r]{3,120})", text, re.I):
-        result["medications"].append({"medication_name": med.strip(), "source": med.strip()})
-
-    for vital in re.findall(r"(?:BP|Blood Pressure|HR|Heart Rate)\s*[:\-]?\s*([0-9/ .a-zA-Z]{2,20})", text, re.I):
-        result["vitals"].append({"display_name": "Vital", "value": vital.strip(), "source": vital.strip()})
-
-    for lab in re.findall(r"(?:HbA1c|WBC|RBC|Hemoglobin|Glucose)\s*[:\-]?\s*([0-9.]+ ?%?)", text, re.I):
-        result["laboratory_results"].append({"display_name": "Lab Result", "value": lab.strip(), "source": lab.strip()})
-
-    for proc in re.findall(r"(?:Procedure|Surgery)\s*[:\-]?\s*([^\n\r]{3,120})", text, re.I):
-        result["procedures"].append({"display_name": proc.strip(), "source": proc.strip()})
-
-    for allergy in re.findall(r"(?:Allergy|Allergic to)\s*[:\-]?\s*([^\n\r]{3,80})", text, re.I):
-        result["allergies"].append({"display_name": allergy.strip(), "source": allergy.strip()})
-
-    return result
-
-
-def validate_extraction_schema(data: dict) -> dict:
-    required_keys = {
-        "document_date",
-        "hospital",
-        "physician",
-        "diagnoses",
-        "medications",
-        "vitals",
-        "laboratory_results",
-        "procedures",
-        "allergies",
-        "source_text_references",
-    }
-    if not required_keys.issubset(data.keys()):
-        raise ValueError("Extraction schema validation failed")
-    for key in ["diagnoses", "medications", "vitals", "laboratory_results", "procedures", "allergies", "source_text_references"]:
-        if not isinstance(data[key], list):
-            raise ValueError(f"Invalid type for {key}")
-    return data
+from app.services.extractor import mock_structured_extraction, validate_extraction_schema  # noqa: F401
 
 
 def generate_token_identifier() -> str:
