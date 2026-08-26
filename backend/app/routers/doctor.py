@@ -90,7 +90,8 @@ def doctor_summary(patient_id: str, user: User = Depends(get_current_user), db: 
     if not grant:
         write_audit(db, action="ACCESS_DENIED", outcome=AuditOutcome.failure, request_id=request_id, actor=user, patient_id=patient_id, resource_type="summary")
         raise HTTPException(status_code=403, detail={"code": "ACCESS_DENIED", "message": "No active share grant"})
-    summary = build_health_summary(db, patient_id)
+    grant_types = grant.scope.get("record_types") or None
+    summary = build_health_summary(db, patient_id, record_types=grant_types)
     write_audit(db, action="ACCESS_GRANTED", outcome=AuditOutcome.success, request_id=request_id, actor=user, patient_id=patient_id, resource_type="summary")
     return summary
 

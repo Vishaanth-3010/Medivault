@@ -159,6 +159,9 @@ def test_doctor_scope_filters_record_types():
     assert r.status_code == 200
     types = {item["type"] for item in r.json()["items"]}
     assert types <= {"observation"}
+    summary = client.get(f"/v1/doctor/patients/{me_a['patient_id']}/summary", headers={"Authorization": f"Bearer {token_doc}"}).json()
+    assert summary["counts"]["medications"] == 0
+    assert summary["counts"]["observations"] >= 1
 
 
 def test_extractor_parses_sample_text():

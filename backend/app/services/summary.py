@@ -7,17 +7,23 @@ from sqlalchemy.orm import Session
 from app.models import AllergyIntolerance, Condition, MedicalDocument, Medication, Observation, Procedure
 
 
-def build_health_summary(db: Session, patient_id: str) -> dict[str, Any]:
+def build_health_summary(
+    db: Session,
+    patient_id: str,
+    record_types: list[str] | None = None,
+) -> dict[str, Any]:
+    allowed = set(record_types) if record_types else None
+
     documents = (
         db.query(MedicalDocument)
         .filter(MedicalDocument.patient_id == patient_id, MedicalDocument.deleted_at.is_(None))
         .all()
     )
-    observations = db.query(Observation).filter(Observation.patient_id == patient_id).all()
-    medications = db.query(Medication).filter(Medication.patient_id == patient_id).all()
-    conditions = db.query(Condition).filter(Condition.patient_id == patient_id).all()
-    procedures = db.query(Procedure).filter(Procedure.patient_id == patient_id).all()
-    allergies = db.query(AllergyIntolerance).filter(AllergyIntolerance.patient_id == patient_id).all()
+    observations = db.query(Observation).filter(Observation.patient_id == patient_id).all() if allowed is None or "observations" in allowed else []
+    medications = db.query(Medication).filter(Medication.patient_id == patient_id).all() if allowed is None or "medications" in allowed else []
+    conditions = db.query(Condition).filter(Condition.patient_id == patient_id).all() if allowed is None or "conditions" in allowed else []
+    procedures = db.query(Procedure).filter(Procedure.patient_id == patient_id).all() if allowed is None or "procedures" in allowed else []
+    allergies = db.query(AllergyIntolerance).filter(AllergyIntolerance.patient_id == patient_id).all() if allowed is None or "allergies" in allowed else []
 
     latest_by_name: dict[str, Observation] = {}
     for obs in observations:
@@ -40,7 +46,7 @@ def build_health_summary(db: Session, patient_id: str) -> dict[str, Any]:
 
     return {
         "counts": {
-            "documents": len(documents),
+            "documents": len(documents) if allowed is None else 0,
             "observations": len(observations),
             "medications": len(medications),
             "conditions": len(conditions),
