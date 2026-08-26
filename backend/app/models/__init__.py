@@ -68,6 +68,7 @@ class Patient(Base):
     medications: Mapped[list["Medication"]] = relationship(back_populates="patient")
     conditions: Mapped[list["Condition"]] = relationship(back_populates="patient")
     procedures: Mapped[list["Procedure"]] = relationship(back_populates="patient")
+    allergies: Mapped[list["AllergyIntolerance"]] = relationship(back_populates="patient")
     share_grants: Mapped[list["ShareGrant"]] = relationship(back_populates="patient", foreign_keys="ShareGrant.patient_id")
 
 
@@ -155,6 +156,7 @@ class Observation(Base):
     unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     effective_time: Mapped[str | None] = mapped_column(String(32), nullable=True)
     reference_range: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    interpretation: Mapped[str | None] = mapped_column(String(32), nullable=True)
     provenance_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("provenance.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -209,6 +211,21 @@ class Procedure(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     patient: Mapped[Patient] = relationship(back_populates="procedures")
+
+
+class AllergyIntolerance(Base):
+    __tablename__ = "allergy_intolerances"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    patient_id: Mapped[str] = mapped_column(String(36), ForeignKey("patients.id"), index=True)
+    document_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("medical_documents.id"), nullable=True)
+    substance: Mapped[str] = mapped_column(String(255))
+    reaction: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    clinical_status: Mapped[str] = mapped_column(String(32), default="active")
+    provenance_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("provenance.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    patient: Mapped[Patient] = relationship(back_populates="allergies")
 
 
 class ShareGrant(Base):

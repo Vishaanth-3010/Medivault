@@ -19,11 +19,22 @@ export function clearToken() {
 export function getProfile<T>(): T | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem("medivault_profile");
-  return raw ? JSON.parse(raw) as T : null;
+  return raw ? (JSON.parse(raw) as T) : null;
 }
 
 export function setProfile(profile: unknown) {
   localStorage.setItem("medivault_profile", JSON.stringify(profile));
+}
+
+function errorMessage(body: unknown, fallback: string) {
+  if (!body || typeof body !== "object") return fallback;
+  const rec = body as Record<string, unknown>;
+  const err = rec.error as Record<string, unknown> | undefined;
+  if (err && typeof err.message === "string") return err.message;
+  const detail = rec.detail as Record<string, unknown> | string | undefined;
+  if (detail && typeof detail === "object" && typeof detail.message === "string") return detail.message;
+  if (typeof detail === "string") return detail;
+  return fallback;
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -36,9 +47,10 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({ error: { code: "UNKNOWN", message: res.statusText } }))) as ApiError;
-    throw new Error(err.error?.message || "Request failed");
+    const body = await res.json().catch(() => null);
+    throw new Error(errorMessage(body, res.statusText || "Request failed"));
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -72,6 +84,8 @@ export type TimelineItem = {
   id: string;
   display_name: string;
   value?: string | null;
+  unit?: string | null;
+  interpretation?: string | null;
   effective_time?: string | null;
   document_id?: string | null;
 };
@@ -98,4 +112,51 @@ export type AuditItem = {
   resource_type?: string | null;
 };
 
-export type DoctorOption = { id: string; name: string; specialization?: string | null };
+export type DoctorOption = { id: string; name: string; specialization?: string | null; organization?: string | null };
+
+export type HealthSummary = {
+  counts: {
+    documents: number;
+    observations: number;
+    medications: number;
+    conditions: number;
+    procedures: number;
+    allergies: number;
+  };
+  latest_observations: Array<{
+    id: string;
+    display_name: string;
+    value: string;
+    unit?: string | null;
+    interpretation?: string | null;
+    effective_time?: string | null;
+  }>;
+  medications: Array<{ id: string; medication_name: string; dosage?: string | null; frequency?: string | null }>;
+  conditions: Array<{ id: string; display_name: string; onset_date?: string | null }>;
+  allergies: Array<{ id: string; substance: string; reaction?: string | null }>;
+  abnormal_observations: Array<{
+    id: string;
+    display_name: string;
+    value: string;
+    unit?: string | null;
+    interpretation?: string | null;
+  }>;
+  processing: { pending: number; failed: number; validated: number };
+};
+
+export type ExtractionJob = {
+  id: string;
+  document_id: string;
+  status: string;
+  extracted_json?: Record<string, unknown> | null;
+  raw_ocr_text?: string | null;
+  error_message?: string | null;
+};
+
+export const RECORD_TYPES = [
+  { id: "observations", label: "Labs & vitals" },
+  { id: "medications", label: "Medications" },
+  { id: "conditions", label: "Conditions" },
+  { id: "procedures", label: "Procedures" },
+  { id: "allergies", label: "Allergies" },
+] as const;

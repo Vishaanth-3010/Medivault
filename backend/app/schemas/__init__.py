@@ -71,10 +71,15 @@ class ExtractionJobResponse(BaseModel):
     document_id: str
     status: str
     extracted_json: dict | None = None
+    raw_ocr_text: str | None = None
     error_code: str | None = None
     error_message: str | None = None
     started_at: datetime
     completed_at: datetime | None = None
+
+
+class ExtractionReviewRequest(BaseModel):
+    action: Literal["confirm", "reject"]
 
 
 class TimelineItem(BaseModel):
@@ -82,6 +87,8 @@ class TimelineItem(BaseModel):
     id: str
     display_name: str
     value: str | None = None
+    unit: str | None = None
+    interpretation: str | None = None
     effective_time: str | None = None
     document_id: str | None = None
 

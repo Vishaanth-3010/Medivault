@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.models import (
+    AllergyIntolerance,
     Condition,
     ExtractionJob,
     MedicalDocument,
@@ -12,12 +13,93 @@ from app.models import (
     ProcessingStatus,
     Provenance,
 )
-from app.services.storage import (
-    extract_text_from_document,
-    mock_structured_extraction,
-    read_document_bytes,
-    validate_extraction_schema,
-)
+from app.services.extractor import has_extracted_facts, mock_structured_extraction, validate_extraction_schema
+from app.services.storage import extract_text_from_document, read_document_bytes
+
+
+def persist_extracted_records(
+    db: Session,
+    document: MedicalDocument,
+    extracted: dict,
+    provenance: Provenance,
+) -> None:
+    if extracted.get("document_date"):
+        document.document_date = extracted["document_date"]
+
+    for vital in extracted.get("vitals", []):
+        db.add(
+            Observation(
+                patient_id=document.patient_id,
+                document_id=document.id,
+                display_name=vital.get("display_name", "Vital"),
+                value=str(vital.get("value", "")),
+                unit=vital.get("unit"),
+                code=vital.get("code"),
+                interpretation=vital.get("interpretation"),
+                provenance_id=provenance.id,
+                effective_time=extracted.get("document_date"),
+            )
+        )
+
+    for lab in extracted.get("laboratory_results", []):
+        db.add(
+            Observation(
+                patient_id=document.patient_id,
+                document_id=document.id,
+                display_name=lab.get("display_name", "Lab Result"),
+                value=str(lab.get("value", "")),
+                unit=lab.get("unit"),
+                code=lab.get("code"),
+                interpretation=lab.get("interpretation"),
+                provenance_id=provenance.id,
+                effective_time=extracted.get("document_date"),
+            )
+        )
+
+    for med in extracted.get("medications", []):
+        db.add(
+            Medication(
+                patient_id=document.patient_id,
+                document_id=document.id,
+                medication_name=med.get("medication_name", "Unknown"),
+                dosage=med.get("dosage"),
+                frequency=med.get("frequency"),
+                instructions=med.get("instructions"),
+                provenance_id=provenance.id,
+            )
+        )
+
+    for diag in extracted.get("diagnoses", []):
+        db.add(
+            Condition(
+                patient_id=document.patient_id,
+                document_id=document.id,
+                display_name=diag.get("display_name", "Unknown"),
+                provenance_id=provenance.id,
+                onset_date=extracted.get("document_date"),
+            )
+        )
+
+    for proc in extracted.get("procedures", []):
+        db.add(
+            Procedure(
+                patient_id=document.patient_id,
+                document_id=document.id,
+                display_name=proc.get("display_name", "Unknown"),
+                provenance_id=provenance.id,
+                performed_date=extracted.get("document_date"),
+            )
+        )
+
+    for allergy in extracted.get("allergies", []):
+        db.add(
+            AllergyIntolerance(
+                patient_id=document.patient_id,
+                document_id=document.id,
+                substance=allergy.get("display_name", "Unknown"),
+                provenance_id=provenance.id,
+            )
+        )
 
 
 def process_document(db: Session, document: MedicalDocument) -> ExtractionJob:
@@ -25,9 +107,9 @@ def process_document(db: Session, document: MedicalDocument) -> ExtractionJob:
     job = ExtractionJob(
         document_id=document.id,
         status=ProcessingStatus.processing,
-        ocr_provider="mock-local" ,
+        ocr_provider="mock-local",
         llm_provider="mock-local",
-        model="regex-extractor-v1",
+        model="regex-extractor-v2",
     )
     db.add(job)
     db.commit()
@@ -38,8 +120,8 @@ def process_document(db: Session, document: MedicalDocument) -> ExtractionJob:
         raw_text = extract_text_from_document(content, document.mime_type)
         job.raw_ocr_text = raw_text
 
-        if not raw_text.strip():
-            raise ValueError("No extractable text found")
+        if not raw_text.strip() or raw_text.startswith("[image document"):
+            raise ValueError("No extractable text found. Image OCR is not enabled in this prototype.")
 
         extracted = validate_extraction_schema(mock_structured_extraction(raw_text))
         job.extracted_json = extracted
@@ -51,73 +133,20 @@ def process_document(db: Session, document: MedicalDocument) -> ExtractionJob:
             ocr_segment=(raw_text[:500] if raw_text else None),
             model=job.model,
             provider=job.llm_provider,
-            confidence=0.75,
+            confidence=extracted.get("confidence", 0.5),
         )
         db.add(provenance)
         db.flush()
 
-        if extracted.get("document_date"):
-            document.document_date = extracted["document_date"]
+        if has_extracted_facts(extracted):
+            persist_extracted_records(db, document, extracted, provenance)
+            job.status = ProcessingStatus.validated
+            document.processing_status = ProcessingStatus.validated
+        else:
+            job.status = ProcessingStatus.human_review
+            document.processing_status = ProcessingStatus.human_review
 
-        for vital in extracted.get("vitals", []):
-            db.add(
-                Observation(
-                    patient_id=document.patient_id,
-                    document_id=document.id,
-                    display_name=vital.get("display_name", "Vital"),
-                    value=vital.get("value", ""),
-                    provenance_id=provenance.id,
-                    effective_time=extracted.get("document_date"),
-                )
-            )
-
-        for lab in extracted.get("laboratory_results", []):
-            db.add(
-                Observation(
-                    patient_id=document.patient_id,
-                    document_id=document.id,
-                    display_name=lab.get("display_name", "Lab Result"),
-                    value=lab.get("value", ""),
-                    provenance_id=provenance.id,
-                    effective_time=extracted.get("document_date"),
-                )
-            )
-
-        for med in extracted.get("medications", []):
-            db.add(
-                Medication(
-                    patient_id=document.patient_id,
-                    document_id=document.id,
-                    medication_name=med.get("medication_name", "Unknown"),
-                    provenance_id=provenance.id,
-                )
-            )
-
-        for diag in extracted.get("diagnoses", []):
-            db.add(
-                Condition(
-                    patient_id=document.patient_id,
-                    document_id=document.id,
-                    display_name=diag.get("display_name", "Unknown"),
-                    provenance_id=provenance.id,
-                    onset_date=extracted.get("document_date"),
-                )
-            )
-
-        for proc in extracted.get("procedures", []):
-            db.add(
-                Procedure(
-                    patient_id=document.patient_id,
-                    document_id=document.id,
-                    display_name=proc.get("display_name", "Unknown"),
-                    provenance_id=provenance.id,
-                    performed_date=extracted.get("document_date"),
-                )
-            )
-
-        job.status = ProcessingStatus.validated
         job.completed_at = datetime.now(UTC)
-        document.processing_status = ProcessingStatus.validated
         db.commit()
         db.refresh(job)
         return job
